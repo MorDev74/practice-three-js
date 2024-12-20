@@ -1,136 +1,148 @@
-'use client'
+'use client';
 
-import { useEffect, useRef } from 'react'
-import * as THREE from 'three'
+import { FC, useEffect, useRef } from 'react';
+import * as THREE from 'three';
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { ModelType, ModelObject } from '@/types/model';
 
 interface CanvasProps {
-    scene: string
+  activeModels: ModelType[];
 }
 
-export default function Canvas({ scene }: CanvasProps) {
-    const canvasRef = useRef<HTMLDivElement>(null)
-    const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
-    const sceneRef = useRef<THREE.Scene | null>(null)
-    const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
-    const meshRef = useRef<THREE.Mesh | null>(null)
-    const frameIdRef = useRef<number>(0)
+const Canvas: FC<CanvasProps> = ({ activeModels }) => {
+  const mountRef = useRef<HTMLDivElement>(null);
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const controlsRef = useRef<OrbitControls | null>(null);
+  const modelsRef = useRef<ModelObject>({});
 
-    // Initialize Three.js scene
-    useEffect(() => {
-        if (!canvasRef.current) return
+  useEffect(() => {
+    if (!mountRef.current) return;
 
-        // Setup renderer
-        rendererRef.current = new THREE.WebGLRenderer({ antialias: true })
-        rendererRef.current.setSize(window.innerWidth - 256, window.innerHeight)
-        canvasRef.current.innerHTML = ''
-        canvasRef.current.appendChild(rendererRef.current.domElement)
+    // Scene setup
+    const scene = new THREE.Scene();
+    sceneRef.current = scene;
 
-        // Setup scene
-        sceneRef.current = new THREE.Scene()
+    // Camera setup
+    const camera = new THREE.PerspectiveCamera(
+      75,
+      (window.innerWidth - 256) / window.innerHeight,
+      0.1,
+      1000
+    );
+    camera.position.z = 5;
+    cameraRef.current = camera;
 
-        // Setup camera
-        cameraRef.current = new THREE.PerspectiveCamera(
-            75,
-            (window.innerWidth - 256) / window.innerHeight,
-            0.1,
-            1000
-        )
-        cameraRef.current.position.z = 5
+    // Renderer setup
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth - 256, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    mountRef.current.appendChild(renderer.domElement);
+    rendererRef.current = renderer;
 
-        // Setup lighting
-        const light = new THREE.DirectionalLight(0xffffff, 1)
-        light.position.set(1, 1, 1)
-        sceneRef.current.add(light)
-        sceneRef.current.add(new THREE.AmbientLight(0x404040))
+    // Controls setup
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controlsRef.current = controls;
 
-        // Handle window resize
-        const handleResize = () => {
-            if (!cameraRef.current || !rendererRef.current) return
-            cameraRef.current.aspect = (window.innerWidth - 256) / window.innerHeight
-            cameraRef.current.updateProjectionMatrix()
-            rendererRef.current.setSize(window.innerWidth - 256, window.innerHeight)
-        }
-        window.addEventListener('resize', handleResize)
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambientLight);
+    
+    const pointLight = new THREE.PointLight(0xffffff, 1);
+    pointLight.position.set(5, 5, 5);
+    scene.add(pointLight);
 
-        // Cleanup function
-        return () => {
-            window.removeEventListener('resize', handleResize)
-            if (frameIdRef.current) {
-                cancelAnimationFrame(frameIdRef.current)
-            }
-            if (meshRef.current && sceneRef.current) {
-                sceneRef.current.remove(meshRef.current)
-                meshRef.current.geometry.dispose()
-                if (Array.isArray(meshRef.current.material)) {
-                    meshRef.current.material.forEach(material => material.dispose())
-                } else {
-                    meshRef.current.material.dispose()
-                }
-            }
-            if (rendererRef.current) {
-                rendererRef.current.dispose()
-            }
-        }
-    }, []) // Only run once on mount
+    // Grid helper
+    const gridHelper = new THREE.GridHelper(10, 10);
+    scene.add(gridHelper);
 
-    // Handle scene changes
-    useEffect(() => {
-        if (!sceneRef.current) return
+    // Animation
+    const animate = () => {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    };
+    animate();
 
-        // Remove and dispose old mesh
-        if (meshRef.current) {
-            sceneRef.current.remove(meshRef.current)
-            meshRef.current.geometry.dispose()
-            if (Array.isArray(meshRef.current.material)) {
-                meshRef.current.material.forEach(material => material.dispose())
-            } else {
-                meshRef.current.material.dispose()
-            }
-            meshRef.current = null
-        }
+    // Cleanup
+    return () => {
+      renderer.dispose();
+      mountRef.current?.removeChild(renderer.domElement);
+    };
+  }, []);
 
-        // Create new geometry based on active scene
-        let geometry: THREE.BufferGeometry
-        let material: THREE.Material
+  // Handle model updates
+  useEffect(() => {
+    const scene = sceneRef.current;
+    const existingModels = modelsRef.current;
 
-        switch (scene) {
-            case 'sphere':
-                geometry = new THREE.SphereGeometry(1, 32, 32)
-                material = new THREE.MeshPhongMaterial({ color: 0x00ff00 })
-                break
-            case 'torus':
-                geometry = new THREE.TorusKnotGeometry(1, 0.3, 100, 16)
-                material = new THREE.MeshPhongMaterial({ color: 0xff00ff })
-                break
-            default: // cube
-                geometry = new THREE.BoxGeometry(2, 2, 2)
-                material = new THREE.MeshPhongMaterial({ color: 0x0000ff })
-        }
+    if (!scene) return;
 
-        meshRef.current = new THREE.Mesh(geometry, material)
-        sceneRef.current.add(meshRef.current)
+    // Remove models that are no longer active
+    Object.keys(existingModels).forEach(modelType => {
+      if (!activeModels.includes(modelType as ModelType)) {
+        scene.remove(existingModels[modelType]);
+        delete existingModels[modelType];
+      }
+    });
 
-        // Animation function
-        const animate = () => {
-            if (!meshRef.current || !sceneRef.current || !cameraRef.current || !rendererRef.current) return
-
-            frameIdRef.current = requestAnimationFrame(animate)
-            meshRef.current.rotation.x += 0.01
-            meshRef.current.rotation.y += 0.01
-            rendererRef.current.render(sceneRef.current, cameraRef.current)
+    // Add new models
+    activeModels.forEach(modelType => {
+      if (!existingModels[modelType]) {
+        let geometry: THREE.BufferGeometry;
+        
+        switch (modelType) {
+          case 'cube':
+            geometry = new THREE.BoxGeometry(1, 1, 1);
+            break;
+          case 'sphere':
+            geometry = new THREE.SphereGeometry(0.5, 32, 32);
+            break;
+          case 'cylinder':
+            geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 32);
+            break;
+          default:
+            return;
         }
 
-        animate()
+        const material = new THREE.MeshPhongMaterial({
+          color: Math.random() * 0xffffff,
+          flatShading: true,
+        });
+        
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(
+          (Math.random() - 0.5) * 4,
+          (Math.random() - 0.5) * 4,
+          (Math.random() - 0.5) * 4
+        );
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        
+        scene.add(mesh);
+        existingModels[modelType] = mesh;
+      }
+    });
+  }, [activeModels]);
 
-        // Cleanup function for scene change
-        return () => {
-            if (frameIdRef.current) {
-                cancelAnimationFrame(frameIdRef.current)
-            }
-        }
-    }, [scene]) // Re-run when scene changes
+  // Handle window resize
+  useEffect(() => {
+    const handleResize = () => {
+      if (cameraRef.current && rendererRef.current) {
+        cameraRef.current.aspect = (window.innerWidth - 256) / window.innerHeight;
+        cameraRef.current.updateProjectionMatrix();
+        rendererRef.current.setSize(window.innerWidth - 256, window.innerHeight);
+      }
+    };
 
-    return (
-        <div ref={canvasRef} className="flex-1 bg-black" />
-    )
-}
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  return <div ref={mountRef} className="flex-1" />;
+};
+
+export default Canvas;

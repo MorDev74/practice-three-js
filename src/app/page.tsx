@@ -3,17 +3,23 @@
 import { useState } from "react";
 import Sidebar from "@/components/SideBar";
 import Canvas from "@/components/Canvas";
-export default function Home() {
-  const [activeScene, setActiveScene] = useState("cube");
+import { ModelType } from "@/types/model";
 
-  function handleSceneChange(scene: string) {
-    setActiveScene(scene);
+export default function Home() {
+  const [activeModels, setActiveModels] = useState<ModelType[]>([]);
+  function toggleModel(modelType: ModelType) {
+    setActiveModels(prev => {
+      if (prev.includes(modelType)) {
+        return prev.filter(type => type !== modelType);
+      }
+      return [...prev, modelType];
+    });
   }
 
   return (
     <div className="flex w-full">
-      <Sidebar activeScene={activeScene} onSceneChange={handleSceneChange}/>
-      <Canvas scene={activeScene}/>
+      <Sidebar onModelToggle={toggleModel}/>
+      <Canvas activeModels={activeModels}/>
     </div>
   );
 }
