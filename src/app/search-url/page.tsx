@@ -1,13 +1,14 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 
-export default function SpecPage() {
+function SearchParamsContent() {
     const searchParams = useSearchParams();
     
     return (
         <div className="p-8">
-            <h1 className="text-2xl font-bold mb-4">Search Parameters</h1>
+            <h1 className="text-2xl font-bold mb-4">Callback Parameters</h1>
             
             <div className="space-y-4">
                 {Array.from(searchParams.entries()).map(([key, value]) => (
@@ -18,9 +19,17 @@ export default function SpecPage() {
                 ))}
                 
                 {Array.from(searchParams.entries()).length === 0 && (
-                    <p className="text-gray-500">No search parameters found</p>
+                    <p className="text-gray-500">No parameters found</p>
                 )}
             </div>
         </div>
+    );
+}
+
+export default function SearchUrlPage() {
+    return (
+        <Suspense fallback={<div className="p-8">Loading...</div>}>
+            <SearchParamsContent />
+        </Suspense>
     );
 }
